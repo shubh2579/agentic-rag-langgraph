@@ -1,147 +1,186 @@
 # Agentic RAG with LangGraph
 
-A self-correcting, adaptive Retrieval-Augmented Generation (RAG) system built with LangGraph that goes far beyond traditional linear RAG pipelines.
+> Part 2 of the RAG Series — building a self-correcting, adaptive RAG pipeline that knows when it's wrong and fixes itself.
 
-## Overview
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/YOUR_USERNAME/agentic-rag-langgraph/blob/main/notebooks/Agentic_RAG_LangGraph_Colab.ipynb)
+![Python](https://img.shields.io/badge/Python-3.10+-blue)
+![LangGraph](https://img.shields.io/badge/LangGraph-0.2+-green)
+![License](https://img.shields.io/badge/License-MIT-yellow)
 
-Traditional RAG: `Query → Retrieve → Generate` (linear, one-shot)
+---
 
-**Agentic RAG**: `Query → Route → Retrieve → Grade → Rewrite? → Generate → Verify` (dynamic, self-correcting)
+## What is Agentic RAG?
 
-The system uses an LLM-powered agent graph that makes intelligent decisions at each step — filtering bad documents, rewriting poor queries, falling back to web search, and verifying the final answer for hallucinations before returning it.
-
-## Architecture
+Traditional RAG is a straight line:
 
 ```
-         ┌───────────┐
-         │   START   │
-         └─────┬─────┘
-               │
-               ▼
-       ┌───────────────┐
-       │  Query Router │
-       └──────┬────────┘
-    AI topic? │  Other?
-      ┌───────┘  └───────────┐
-      ▼                      ▼
-┌──────────┐           ┌────────────┐
-│ Retrieve │           │ Web Search │
-└────┬─────┘           └──────┬─────┘
-     │                        │
-     ▼                        │
-┌────────────────┐            │
-│  Grade Docs    │            │
-└──────┬─────────┘            │
-  OK?  │  Bad?                │
-   ┌───┘  └──────────┐        │
-   ▼                 ▼        │
-Generate       Rewrite Query  │
-   │                 │        │
-   │    ┌────────────┘        │
-   │    │                     │
-   ◄────┘ ◄───────────────────┘
-   │
-   ▼
-┌────────────────────┐
-│  Check Hallucation │
-│  & Answer Quality  │
-└──────┬─────────────┘
-  ✅   │   ❌
-  ▼    │   └──► Retry
-┌─────┐│
-│ END ││
-└─────┘│
+Query → Retrieve → Generate
 ```
+
+It retrieves documents and generates an answer — no matter how bad the documents are, no matter if the answer is hallucinated.
+
+**Agentic RAG** turns that into a loop:
+
+```
+Query → Route → Retrieve → Grade Docs → [Rewrite?] → Generate → Verify → Done
+```
+
+The system actively checks its own work at each step and retries until the answer is actually good.
+
+---
+
+## Project Structure
+
+```
+agentic-rag-langgraph/
+├── notebooks/
+│   └── Agentic_RAG_LangGraph_Colab.ipynb   # Main notebook (runs in Colab)
+├── .env.example                              # API key template
+├── .gitignore
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## Agent Architecture
+
+```
+              ┌─────────┐
+              │  START  │
+              └────┬────┘
+                   │
+                   ▼
+          ┌─────────────────┐
+          │   Query Router  │
+          └────────┬────────┘
+         AI topic? │  Other topic?
+         ┌─────────┘  └──────────────┐
+         ▼                           ▼
+   ┌───────────┐               ┌────────────┐
+   │  Retrieve │               │ Web Search │
+   └─────┬─────┘               └──────┬─────┘
+         │                            │
+         ▼                            │
+  ┌─────────────┐                     │
+  │ Grade Docs  │                     │
+  └──────┬──────┘                     │
+  OK? ───┤ Not relevant?              │
+         │       └──► Rewrite Query ──┘
+         ▼               (max 2 retries, then web search)
+   ┌──────────┐
+   │ Generate │◄───────────────────────┘
+   └─────┬────┘
+         │
+         ▼
+  ┌───────────────────────┐
+  │ Hallucination Check   │
+  │ + Answer Quality Check│
+  └──────────┬────────────┘
+     Good?   │   Bad?
+     ▼       │    └──► Rewrite & retry
+  ┌─────┐    │
+  │ END │    │
+  └─────┘    │
+```
+
+---
 
 ## Components
 
-| Component | Role |
-|-----------|------|
-| **Query Router** | Routes to vectorstore (AI/ML topics) or Tavily web search (current events, other topics) |
-| **Document Grader** | Binary relevance scoring — filters out irrelevant chunks before generation |
-| **Query Rewriter** | Rewrites vague or low-quality queries to improve retrieval (up to 2 retries) |
-| **RAG Generator** | Synthesizes a concise answer from the retrieved context |
-| **Hallucination Checker** | Verifies the answer is grounded in the retrieved documents |
+| Node | What it does |
+|------|-------------|
+| **Query Router** | Routes to vectorstore for AI/ML topics; Tavily web search for everything else |
+| **Retrieve** | Fetches top-4 chunks from Chroma vectorstore |
+| **Grade Documents** | Binary relevance check — filters out irrelevant chunks |
+| **Query Rewriter** | Rewrites vague queries for better retrieval (up to 2 retries) |
+| **Web Search** | Tavily fallback when vectorstore can't answer |
+| **Generate** | Synthesizes a concise answer from filtered context |
+| **Hallucination Checker** | Verifies the answer is grounded in the source documents |
 | **Answer Grader** | Confirms the answer actually addresses the original question |
+
+---
 
 ## Tech Stack
 
-- **[LangGraph](https://github.com/langchain-ai/langgraph)** — stateful agent graph with conditional edges and cycles
-- **[LangChain](https://github.com/langchain-ai/langchain)** — chains, prompts, document loaders
-- **[OpenAI GPT-4o-mini](https://platform.openai.com/docs/models)** — LLM for all reasoning steps
-- **[Chroma](https://www.trychroma.com/)** — local vector store with OpenAI embeddings
-- **[Tavily](https://tavily.com/)** — real-time web search fallback
+| Tool | Role |
+|------|------|
+| [LangGraph](https://github.com/langchain-ai/langgraph) | Stateful agent graph with conditional edges and cycles |
+| [LangChain](https://github.com/langchain-ai/langchain) | Chains, prompts, loaders |
+| [OpenAI GPT-4o-mini](https://platform.openai.com/docs/models) | LLM powering all reasoning steps |
+| [Chroma](https://www.trychroma.com/) | Local vector store |
+| [Tavily](https://tavily.com/) | Real-time web search |
 
-## Quick Start
+---
 
-### Run in Google Colab
+## Quickstart
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/YOUR_USERNAME/agentic-rag-langgraph/blob/main/Agentic_RAG_LangGraph_Colab.ipynb)
+### Option 1 — Google Colab (recommended)
 
-### Local Setup
+Click the badge at the top. Add `OPENAI_API_KEY` and `TAVILY_API_KEY` to Colab Secrets and run all cells.
+
+### Option 2 — Local
 
 ```bash
-pip install langgraph langchain langchain-openai langchain-community \
-    langchain-chroma chromadb tiktoken bs4 tavily-python
+git clone https://github.com/YOUR_USERNAME/agentic-rag-langgraph.git
+cd agentic-rag-langgraph
+
+pip install -r requirements.txt
+
+cp .env.example .env
+# Edit .env and add your API keys
+
+jupyter notebook notebooks/Agentic_RAG_LangGraph_Colab.ipynb
 ```
 
-Set your API keys:
+---
 
-```python
-import os
-os.environ["OPENAI_API_KEY"] = "your-openai-key"
-os.environ["TAVILY_API_KEY"] = "your-tavily-key"
-```
+## Example Outputs
 
-Then open `Agentic_RAG_LangGraph_Colab.ipynb` in Jupyter and run all cells.
-
-## Example Runs
-
-**AI topic → routes to vectorstore:**
+**AI topic → vectorstore path:**
 ```
 ❓ What are the main components of an AI agent?
-🚦 ROUTING → vectorstore
-🔍 RETRIEVE → grade docs → ✅ 3 relevant
-💡 GENERATE → ✅ grounded
-💡 Answer: Planning, memory, and tool use are the three core components...
+🚦 ROUTING  → vectorstore
+🔍 RETRIEVE → 4 chunks fetched
+📊 GRADE    → 3 relevant, 1 filtered
+💡 GENERATE → answer created
+🔎 CHECK    → ✅ grounded, ✅ addresses question
+Answer: Planning, memory, and tool use are the three core components...
 ```
 
-**Current events → routes to web search:**
+**Current events → web search path:**
 ```
 ❓ What are the latest developments in AI regulation?
-🚦 ROUTING → web_search
-🌐 WEB SEARCH → generate
-💡 Answer: Biden's Executive Order, new employer duties for bias audits...
+🚦 ROUTING  → web_search
+🌐 SEARCH   → 3 results fetched
+💡 GENERATE → answer created
+🔎 CHECK    → ✅ grounded, ✅ addresses question
+Answer: Biden's Executive Order, new employer duties for bias audits...
 ```
+
+---
 
 ## Knowledge Base
 
-The default vectorstore is built from three Lilian Weng blog posts:
+The default vectorstore is built from three [Lilian Weng](https://lilianweng.github.io/) blog posts:
+
 - [LLM Powered Autonomous Agents](https://lilianweng.github.io/posts/2023-06-23-agent/)
 - [Prompt Engineering](https://lilianweng.github.io/posts/2023-03-15-prompt-engineering/)
 - [Adversarial Tic-Tac-Toe](https://lilianweng.github.io/posts/2023-10-25-adv-tic-tac-toe/)
 
-Swap in any URLs or local documents by editing the `urls` list in Section 2 of the notebook.
+Swap in your own documents by editing the `urls` list in Section 2 of the notebook.
 
-## Why Agentic RAG?
+---
 
-Standard RAG fails silently — it retrieves, generates, and returns regardless of quality. Agentic RAG adds:
+## RAG Series
 
-- **Relevance filtering** — bad documents are dropped, not passed to the LLM
-- **Query refinement** — poor queries are rewritten before retry
-- **Source diversity** — web search as a fallback when the vectorstore falls short
-- **Grounding verification** — hallucinated answers are caught and regenerated
-- **Answer validation** — confirms the question was actually answered
+| Part | Topic | Status |
+|------|-------|--------|
+| Part 1 | Basic RAG with LangChain | ✅ Published |
+| **Part 2** | **Agentic RAG with LangGraph** | ✅ **This repo** |
+| Part 3 | Coming soon | 🔜 |
 
-## Part of the RAG Series
-
-This notebook is **Part 2** of a hands-on RAG series:
-
-| Part | Topic |
-|------|-------|
-| Part 1 | Basic RAG with LangChain |
-| **Part 2** | **Agentic RAG with LangGraph** ← you are here |
-| Part 3 | Coming soon |
+---
 
 ## License
 
