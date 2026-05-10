@@ -1,6 +1,6 @@
 # Agentic RAG with LangGraph
 
-> Part 2 of the RAG Series — building a self-correcting, adaptive RAG pipeline that knows when it's wrong and fixes itself.
+> Part 1 of the RAG Series — building a self-correcting, adaptive RAG pipeline that knows when it's wrong and fixes itself.
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/YOUR_USERNAME/agentic-rag-langgraph/blob/main/notebooks/Agentic_RAG_LangGraph_Colab.ipynb)
 ![Python](https://img.shields.io/badge/Python-3.10+-blue)
@@ -176,9 +176,8 @@ Swap in your own documents by editing the `urls` list in Section 2 of the notebo
 
 | Part | Topic | Status |
 |------|-------|--------|
-| Part 1 | Basic RAG with LangChain | ✅ Published |
-| **Part 2** | **Agentic RAG with LangGraph** | ✅ **This repo** |
-| Part 3 | Coming soon | 🔜 |
+| **Part 1** | **Agentic RAG with LangGraph** | ✅ **This repo** |
+| Part 2 | Coming soon | 🔜 |
 
 ---
 
